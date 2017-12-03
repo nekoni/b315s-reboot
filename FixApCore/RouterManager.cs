@@ -69,42 +69,14 @@
                 CookieContainer = new CookieContainer()
             };
 
-            this.client = new HttpClient(httpClientHandler);
+            this.client = new HttpClient(this.httpClientHandler);
 
             this.InitJsEngine();
         }
 
-        private string EncodeData(string data)
-        {
-            if (!this.hasPublicKeys)
-            {
-                throw new NotSupportedException("You need to load keys first");
-            }
-
-            var rsa = new RsaEncryptor(this.encpubkeyN, this.encpubkeyE);
-            var encString = Convert.ToBase64String(this.encoding.GetBytes(data));
-            var num = (double)encString.Length / 245;
-            var resTotal = string.Empty;
-            for (int i = 0; i < num; i++)
-            {
-                var index = i * 245;
-                var length = 245;
-                if (index + 245 > encString.Length)
-                {
-                    length = encString.Length - index;
-                }
-
-                var encData = encString.Substring(index, length);
-                var res = rsa.EncryptData(encData);
-                resTotal += res;
-            }
-
-            return resTotal;
-        }
-
         public async Task<string> GetConnectionTypeAsync()
         {
-            await LoadCookiesIfNeededAsync();
+            await this.LoadCookiesIfNeededAsync();
 
             var status = await this.client.GetStringAsync(connectionStatusUrl);
             var match = Regex.Match(status, "<CurrentNetworkType>(?<mode>\\d+)</CurrentNetworkType>");
@@ -135,7 +107,7 @@
 
         public async Task<bool> RebootAsync()
         {
-            await LoadHomePageWithCsrfAsync();
+            await this.LoadHomePageWithCsrfAsync();
 
             var data = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><request><Control>1</Control></request>";
             var request = new HttpRequestMessage()
@@ -164,14 +136,14 @@
 
         public async Task<bool> LoginAsync()
         {
-            await GetPublicKeysAsync();
+            await this.GetPublicKeysAsync();
 
             return await this.DoLoginAsync();
         }
 
         public async Task<bool> SwitchConnectionTypeAsync(string connectionType)
         {
-            await LoadHomePageWithCsrfAsync();
+            await this.LoadHomePageWithCsrfAsync();
 
             var verboseType = ConnectionSwitchType.Parse(connectionType);
             Console.WriteLine("Switching to {0}", verboseType);
@@ -203,14 +175,42 @@
             return false;
         }
 
+        private string EncodeData(string data)
+        {
+            if (!this.hasPublicKeys)
+            {
+                throw new NotSupportedException("You need to load keys first");
+            }
+
+            var rsa = new RsaEncryptor(this.encpubkeyN, this.encpubkeyE);
+            var encString = Convert.ToBase64String(this.encoding.GetBytes(data));
+            var num = (double)encString.Length / 245;
+            var resTotal = string.Empty;
+            for (int i = 0; i < num; i++)
+            {
+                var index = i * 245;
+                var length = 245;
+                if (index + 245 > encString.Length)
+                {
+                    length = encString.Length - index;
+                }
+
+                var encData = encString.Substring(index, length);
+                var res = rsa.EncryptData(encData);
+                resTotal += res;
+            }
+
+            return resTotal;
+        }
+
         private void InitJsEngine()
         {
-            engine = new ScriptEngine();
-            engine.Global.SetPropertyValue("location", new Location(engine, homePageUrl), true);
-            engine.SetGlobalValue("window", engine.Global);
-            engine.SetGlobalValue("console", new FirebugConsole(engine));
-            engine.EnableDebugging = true;
-            engine.ForceStrictMode = false;
+            this.engine = new ScriptEngine();
+            this.engine.Global.SetPropertyValue("location", new Location(this.engine, this.homePageUrl), true);
+            this.engine.SetGlobalValue("window", this.engine.Global);
+            this.engine.SetGlobalValue("console", new FirebugConsole(this.engine));
+            this.engine.EnableDebugging = true;
+            this.engine.ForceStrictMode = false;
         }
 
         private async Task LoadCookiesIfNeededAsync(bool force = false)
@@ -227,13 +227,13 @@
         {
             Console.WriteLine("Login");
 
-            await LoadHomePageWithCsrfAsync();
+            await this.LoadHomePageWithCsrfAsync();
 
-            engine.Evaluate(string.Format("var name = '{0}';", this.user));
-            engine.Evaluate(string.Format("var password = '{0}';", this.password));
-            engine.Evaluate(string.Format("var g_password_type = '4';"));
+            this.engine.Evaluate(string.Format("var name = '{0}';", this.user));
+            this.engine.Evaluate(string.Format("var password = '{0}';", this.password));
+            this.engine.Evaluate(string.Format("var g_password_type = '4';"));
 
-            var jsResult = engine.Evaluate(
+            var jsResult = this.engine.Evaluate(
                 "psd = base64encode(SHA256(name + base64encode(SHA256(password)) + g_requestVerificationToken[0]));");
 
             var sb = new StringBuilder();
@@ -244,11 +244,10 @@
             sb.AppendLine("};");
             sb.AppendLine("var xmlDate = object2xml('request', request);");
 
-            engine.Evaluate(sb.ToString());
+            this.engine.Evaluate(sb.ToString());
 
-            var rsaData = engine.Evaluate("xmlDate");
-
-            var data = EncodeData(rsaData.ToString());
+            var rsaData = this.engine.Evaluate("xmlDate");
+            var data = this.EncodeData(rsaData.ToString());
 
             var request = new HttpRequestMessage()
             {
@@ -269,9 +268,7 @@
                 return true;
             }
 
-            var errorMessage = ProcessErrorMessages(result);
-            Console.WriteLine("Logging in failed: {0}", errorMessage);
-
+            Console.WriteLine("Logging in failed: {0}", ProcessErrorMessages(result));
             return false;
         }
 
@@ -311,8 +308,8 @@
                 this.encpubkeyE,
                 this.encpubkeyN.Remove(4) + "..." + this.encpubkeyN.Substring(this.encpubkeyN.Length - 4));
             var directory = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
-            var scriptSource = new FileScriptSource(Path.Combine(directory,"main.js"));
-            var jsResult = engine.Evaluate(scriptSource);
+            var scriptSource = new FileScriptSource(Path.Combine(directory, "main.js"));
+            var jsResult = this.engine.Evaluate(scriptSource);
 
             this.engine.Evaluate(
                 string.Format(
@@ -341,9 +338,9 @@
                 this.firstCsrf = matches[0].Groups["data"].Value;
                 secondCsrf = matches[1].Groups["data"].Value;
 
-                engine.Evaluate(
+                this.engine.Evaluate(
                     string.Format("g_requestVerificationToken = ['{0}', '{1}']",
-                    firstCsrf,
+                    this.firstCsrf,
                     secondCsrf));
             }
         }
