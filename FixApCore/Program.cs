@@ -15,12 +15,16 @@
     /// </summary>
     public class Program
     {
+        private static readonly int delay = 5000;
+
+        private static readonly int retries = 10;
+
         public static void Main(string[] args)
         {
             MainAsync(args).Wait();
         }
 
-        static async Task MainAsync(string[] args)
+        private static async Task MainAsync(string[] args)
         {
             if (args.Length != 3)
             {
@@ -33,20 +37,20 @@
             var password = args[2];
 
             var manager = new RouterManager(url, user, password);
-            for (int x = 0; x < 10; x++)
+            for (int x = 0; x < retries; x++)
             {
                 var connection = await manager.GetConnectionTypeAsync();
                 if (connection != "3G" &&
-                connection != "LTE")
+                    connection != "LTE")
                 {
-                    Console.WriteLine("Connection seems down " + connection);
-                    Console.WriteLine("Retring in 5 seconds");
-                    Thread.Sleep(5000);
+                    Console.WriteLine($"Connection seems down {connection}");
+                    Console.WriteLine($"Retring in {delay} seconds");
+                    Thread.Sleep(delay);
                     continue;
                 }
                 else
                 {
-                    Console.WriteLine("Connection is " + connection);
+                    Console.WriteLine($"Connection is {connection}.");
                     return;
                 }
             }
